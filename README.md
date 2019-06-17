@@ -1,1 +1,1 @@
-urus_mri_recon
+PyTorch implementation of complex convolutional network for Magnetic Reasonance Imaging (MRI) reconstruction 
