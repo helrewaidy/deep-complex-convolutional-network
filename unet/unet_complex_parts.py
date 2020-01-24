@@ -38,11 +38,11 @@ class double_conv(nn.Module):
             ComplexConv2d(in_ch, out_ch, [3, 3], padding=(1, 1)),
             RadialBatchNorm2d(out_ch),
             Activation(out_ch),
-            ComplexDropout2d(params.dropout_ratio),
+#            ComplexDropout2d(params.dropout_ratio),
             ComplexConv2d(out_ch, out_ch, [3, 3], padding=(1, 1)),
             RadialBatchNorm2d(out_ch),
             Activation(out_ch),
-            ComplexDropout2d(params.dropout_ratio)
+#            ComplexDropout2d(params.dropout_ratio)
         )
 
     def forward(self, x):
@@ -92,11 +92,11 @@ class bottleneck(nn.Module):
         self.residual_connection = residual_connection
         self.down_conv = down_conv(in_ch)
         self.double_conv = nn.Sequential(
-            ComplexDropout2d(params.dropout_ratio),
+#            ComplexDropout2d(params.dropout_ratio),
             ComplexConv2d(in_ch, 2 * in_ch, [3, 3], padding=(1, 1)),
             RadialBatchNorm2d(2 * in_ch),
             Activation(2 * in_ch),
-            ComplexDropout2d(params.dropout_ratio),
+#            ComplexDropout2d(params.dropout_ratio),
             ComplexConv2d(2 * in_ch, out_ch, [3, 3], padding=(1, 1)),
             RadialBatchNorm2d(out_ch),
             Activation(out_ch)
