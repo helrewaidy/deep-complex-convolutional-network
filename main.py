@@ -1,41 +1,30 @@
-# models
+
 import shutil
 import sys
 
-from tensorboardX import SummaryWriter
+import torch.nn.modules.loss as Loss
+from torch.utils.tensorboard import SummaryWriter
+# from tensorboardX import SummaryWriter
 from torch import optim
 
-from utils.myloss import *
-import torch.nn.modules.loss as Loss
+from parameters import Parameters
 from unet import UNet
-from utils import *
-from utils.cmplxBatchNorm import magnitude, normalizeComplexBatch_byMagnitudeOnly
+from utils.cmplx_batchnorm import magnitude, normalize_complex_batch_by_magnitude_only
 from utils.dataset import *
+from utils.myloss import *
 
-#
 # set seed points
 seed_num = 888
-
 torch.manual_seed(seed_num)
 torch.cuda.manual_seed_all(seed_num)
-random.seed(seed_num)
 np.random.seed(seed_num)
 params = Parameters()
 
 ####################################
-#
 # Create Data Generators
-#
-####################################
+training_DG, validation_DG, params = get_dataset_generators(params)
 
-training_DG, validation_DG, params = getDatasetGenerators(params)
-
-####################################
-#
 # Create Model
-#
-####################################
-
 net = UNet(params.n_channels, 1)
 
 if params.multi_GPU:
@@ -43,11 +32,7 @@ if params.multi_GPU:
 else:
     net.to(params.device)
 
-####################################
-#
-# initializations
-#
-####################################
+optimizer = optim.Adam(net.parameters(), lr=params.args.lr)
 
 if not os.path.exists(params.model_save_dir):
     os.makedirs(params.model_save_dir)
@@ -58,95 +43,54 @@ if not os.path.exists(params.tensorboard_dir):
 writer = SummaryWriter(params.tensorboard_dir)
 
 
-def train(net):
-    ###########################################
-    #
+def train():
     # INITIALIZATIONS
-    #
-    ############################################
-    optimizer = optim.Adam(net.parameters(), lr=params.args.lr)
-    #     optimizer = optim.SGD(net.parameters(), lr=0.1, momentum=0.9)
-
-    LOSS = list()
-    SSIMLOSS = list()
+    tr_loss = list()
+    tr_ssim_loss = list()
     ssimCriterion = SSIM()
     mseCriterion = Loss.MSELoss()
-    kscCriterion = KspaceConsistency()
-    tvCriterion = TotalVariations()
 
     lossCrit = mseCriterion
-    vld_MSE_LOSS = list()
-    vld_SSIM_LOSS = list()
+    vld_mse_loss = list()
+    vld_ssim_loss = list()
 
-    vld_MSE_LOSS_in = list()
-    vld_SSIM_LOSS_in = list()
+    vld_mse_loss_in = list()
+    vld_ssim_loss_in = list()
     vi = 0
     i = 0
-    bt = 0
 
-    ###########################################
-    #
     # LOAD LATEST (or SPECIFIC) MODEL
-    #
-    ############################################
-    models = os.listdir(params.model_save_dir);
-    s_epoch = 0
-
-    def load_model(epoch):
-        print('loading model at epoch ' + str(epoch))
-        net.load_state_dict(torch.load(params.model_save_dir + models[0][0:11] + str(epoch) + '.pth')['state_dict'])
-        optimizer.load_state_dict(
-            torch.load(params.model_save_dir + models[0][0:11] + str(epoch) + '.pth')['optimizer'])
-        LOSS = torch.load(params.model_save_dir + models[0][0:11] + str(epoch) + '.pth')['loss']
-
-    print(len(models))
-    if len(models) > 0:
-        if s_epoch == -1:
-            s_epoch = max([int(epo[11:-4]) for epo in models[:]])
-        print("Loading model ...")
-        load_model(s_epoch)
-        s_epoch = s_epoch - 1
-        print("Model loaded !")
+    s_epoch = load_model(-1)
 
     for epoch in range(s_epoch, params.epochs):
         print('epoch {}/{}...'.format(epoch + 1, params.epochs))
 
-        adjust_learning_rate(optimizer, epoch)
+        adjust_learning_rate(epoch)
 
         ###########################################
-        #
         # Training
-        #
-        ############################################
         l = 0
         itt = 0
         TAG = 'Training'
-        MAX = list()
         if not params.Validation_Only:
             for local_batch, local_labels, sliceID, orig_size, usr in training_DG:
 
                 X = Variable(torch.FloatTensor(local_batch.float())).to(params.device)
                 y = Variable(torch.FloatTensor(local_labels.float())).to(params.device)
 
-                input_mag = normalizeBatch_torch(get_magnitude(X))
-                LOST_mag = normalizeBatch_torch(y[:, :, :, :, 0])
+                input_mag = normalize_batch_torch(get_magnitude(X))
+                LOST_mag = normalize_batch_torch(y[:, :, :, :, 0])
 
                 if params.complex_net:
-                    X = normalizeComplexBatch_byMagnitudeOnly(X, False)
-                    y = normalizeComplexBatch_byMagnitudeOnly(y, True)
+                    X = normalize_complex_batch_by_magnitude_only(X, False)
+                    y = normalize_complex_batch_by_magnitude_only(y, True)
                 else:
                     X = get_magnitude(X)
                     y = y[:, :, :, :, 0]
-                    X = normalizeBatch_torch(X)
-                    y = normalizeBatch_torch(y)
+                    X = normalize_batch_torch(X)
+                    y = normalize_batch_torch(y)
 
                 y_pred = net(X)
-
-                if params.complex_net:
-                    loss = lossCrit(magnitude(y_pred).squeeze(1), y[:, :, :, :, 0].squeeze(1))
-                else:
-                    loss = lossCrit(y_pred, y)
-                    simloss = ssimCriterion(y_pred, y)
 
                 if params.complex_net:
                     loss = lossCrit(magnitude(y_pred).squeeze(1), y[:, :, :, :, 0].squeeze(1))
@@ -155,8 +99,8 @@ def train(net):
                     loss = lossCrit(y_pred, y)
                     simloss = ssimCriterion(y_pred, y)
 
-                LOSS.append(loss.cpu().data.numpy())
-                SSIMLOSS.append(simloss.cpu().data.numpy())
+                tr_loss.append(loss.cpu().data.numpy())
+                tr_ssim_loss.append(simloss.cpu().data.numpy())
 
                 l += loss.data[0]
 
@@ -178,7 +122,7 @@ def train(net):
                     is_best = 0
                     save_checkpoint({
                         'epoch': epoch + 1,
-                        'loss': LOSS,
+                        'loss': tr_loss,
                         'arch': 'recoNet_Model1',
                         'state_dict': net.state_dict(),
                         'optimizer': optimizer.state_dict(),
@@ -190,13 +134,10 @@ def train(net):
 
         else:
             load_model(epoch + 1)
-        #####################################
-        #
-        # Validation
-        #
-        #####################################
 
-        vl = 0
+        #####################################
+        # Validation
+
         vitt = 0
         vld_mse = 0
         vld_ssim = 0
@@ -211,17 +152,17 @@ def train(net):
                 X = Variable(torch.FloatTensor(local_batch.float())).to(params.device)
                 y = Variable(torch.FloatTensor(local_labels.float())).to(params.device)
 
-                input_mag = normalizeBatch_torch(get_magnitude(X))
-                LOST_mag = normalizeBatch_torch(y[:, :, :, :, 0])
+                input_mag = normalize_batch_torch(get_magnitude(X))
+                LOST_mag = normalize_batch_torch(y[:, :, :, :, 0])
 
                 if params.complex_net:
-                    X = normalizeComplexBatch_byMagnitudeOnly(X, False)
-                    y = normalizeComplexBatch_byMagnitudeOnly(y, True)
+                    X = normalize_complex_batch_by_magnitude_only(X, False)
+                    y = normalize_complex_batch_by_magnitude_only(y, True)
                 else:
                     X = get_magnitude(X)
                     y = y[:, :, :, :, 0]
-                    X = normalizeBatch_torch(X)
-                    y = normalizeBatch_torch(y)
+                    X = normalize_batch_torch(X)
+                    y = normalize_batch_torch(y)
 
                 y_pred = net(X)
 
@@ -233,16 +174,14 @@ def train(net):
                     mseloss = mseCriterion(y_pred, y)
                     ssimloss = ssimCriterion(y_pred, y)
 
-
                 mseloss_in = mseCriterion(input_mag, LOST_mag)
                 ssimloss_in = ssimCriterion(input_mag, LOST_mag)
 
+                vld_mse_loss.append(mseloss.cpu().data.numpy())
+                vld_ssim_loss.append(ssimloss.cpu().data.numpy())
 
-                vld_MSE_LOSS.append(mseloss.cpu().data.numpy())
-                vld_SSIM_LOSS.append(ssimloss.cpu().data.numpy())
-
-                vld_MSE_LOSS_in.append(mseloss_in.cpu().data.numpy())
-                vld_SSIM_LOSS_in.append(ssimloss_in.cpu().data.numpy())
+                vld_mse_loss_in.append(mseloss_in.cpu().data.numpy())
+                vld_ssim_loss_in.append(ssimloss_in.cpu().data.numpy())
 
                 vld_mse += mseloss.data[0]
                 vld_ssim += ssimloss.data[0]
@@ -277,11 +216,37 @@ def train(net):
     writer.close()
 
 
+def load_model(epoch=0):
+    '''
+    load model at specific epoch
+    :param:
+    epoch is integer specify which model to be loaded. If
+        epoch = -1: load latest model or start from 1 if there is no saved models
+        epoch = 0: don't load any model and start from model #1
+        epoch = num: load model #num
+
+    :returns: the loeaded model
+    '''
+    models = [m for m in os.listdir(params.model_save_dir) if m.endswith('.pth')]
+    if len(models) == 0:
+        return 1
+
+    s_epoch = epoch if epoch != -1 else max([int(epo.split('_')[-1][:-4]) for epo in models[:]])
+    try:
+        model = torch.load(params.model_save_dir + models[0][0:11] + str(s_epoch) + '.pth')
+        model.load_state_dict(model['state_dict'])
+        optimizer.load_state_dict(model['optimizer'])
+    except:
+        print('Model {0} does not exist!'.format(s_epoch))
+        return 1
+    return s_epoch
+
 
 def get_magnitude(input):
     return (input[:, :, :, :, 0] ** 2 + input[:, :, :, :, 1] ** 2) ** 0.5
 
-def normalizeBatch_torch(p, dims=[2, 3]):
+
+def normalize_batch_torch(p, dims=[2, 3]):
     ''' normalize each slice alone'''
     if torch.std(p) == 0:
         raise ZeroDivisionError
@@ -296,25 +261,28 @@ def normalizeBatch_torch(p, dims=[2, 3]):
 
     return (p - mean) / std
 
+
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
     if is_best:
         shutil.copyfile(filename, 'model_best.pth.tar')
 
-def adjust_learning_rate(optimizer, epoch):
+
+def adjust_learning_rate(epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 20 epochs"""
     lr = params.args.lr * (0.1 ** (epoch // 20))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
 
-try:
-    train(net)
-
-except KeyboardInterrupt:
-    print('Interrupted')
-    torch.save(net.state_dict(), 'MODEL_INTERRUPTED.pth')
+if __name__ == '__main__':
+    params.parse_args()
     try:
-        sys.exit(0)
-    except SystemExit:
-        os._exit(0)
+        train(net)
+    except KeyboardInterrupt:
+        print('Interrupted')
+        torch.save(net.state_dict(), 'MODEL_INTERRUPTED.pth')
+        try:
+            sys.exit(0)
+        except SystemExit:
+            os._exit(0)

@@ -4,17 +4,13 @@ Created on May 21, 2018
 '''
 
 import torch
-
 import torch.nn as nn
 import torch.nn.functional as F
 from complexnet.cmplxconv import ComplexConv2d
-from complexnet.cmplxbn import ComplexBatchNormalize
-from complexnet.radialbn2 import RadialBatchNorm2d
-from complexnet.cmplxupsample import ComplexUpsample
-from complexnet.cmplxdropout import ComplexDropout2d
 from complexnet.cmplxmodrelu import ModReLU
+from complexnet.cmplxupsample import ComplexUpsample
+from complexnet.radialbn2 import RadialBatchNorm2d
 from complexnet.zrelu import ZReLU
-
 from parameters import Parameters
 
 params = Parameters()
@@ -29,20 +25,20 @@ def Activation(*args):
         return ZReLU(polar=False)
 
 
-class double_conv(nn.Module):
+class DoubleConv(nn.Module):
     '''(conv => ReLU => BN) * 2'''
 
     def __init__(self, in_ch, out_ch):
-        super(double_conv, self).__init__()
+        super(DoubleConv, self).__init__()
         self.conv = nn.Sequential(
             ComplexConv2d(in_ch, out_ch, [3, 3], padding=(1, 1)),
             RadialBatchNorm2d(out_ch),
             Activation(out_ch),
-#            ComplexDropout2d(params.dropout_ratio),
+            #            ComplexDropout2d(params.dropout_ratio),
             ComplexConv2d(out_ch, out_ch, [3, 3], padding=(1, 1)),
             RadialBatchNorm2d(out_ch),
             Activation(out_ch),
-#            ComplexDropout2d(params.dropout_ratio)
+            #            ComplexDropout2d(params.dropout_ratio)
         )
 
     def forward(self, x):
@@ -50,9 +46,9 @@ class double_conv(nn.Module):
         return x
 
 
-class down_conv(nn.Module):
+class DownConv(nn.Module):
     def __init__(self, in_ch):
-        super(down_conv, self).__init__()
+        super(DownConv, self).__init__()
         self.conv = nn.Sequential(
             ComplexConv2d(in_ch, in_ch, [3, 3], stride=(2, 2), padding=(1, 1)),
             RadialBatchNorm2d(in_ch),
@@ -64,21 +60,21 @@ class down_conv(nn.Module):
         return x
 
 
-class inconv(nn.Module):
+class InConv(nn.Module):
     def __init__(self, in_ch, out_ch):
-        super(inconv, self).__init__()
-        self.conv = double_conv(in_ch, out_ch)
+        super(InConv, self).__init__()
+        self.conv = DoubleConv(in_ch, out_ch)
 
     def forward(self, x):
         x = self.conv(x)
         return x
 
 
-class down(nn.Module):
+class Down(nn.Module):
     def __init__(self, in_ch, out_ch):
-        super(down, self).__init__()
-        self.down_conv = down_conv(in_ch)
-        self.double_conv = double_conv(in_ch, out_ch)
+        super(Down, self).__init__()
+        self.down_conv = DownConv(in_ch)
+        self.double_conv = DoubleConv(in_ch, out_ch)
 
     def forward(self, x):
         down_x = self.down_conv(x)
@@ -86,17 +82,17 @@ class down(nn.Module):
         return x, down_x
 
 
-class bottleneck(nn.Module):
+class BottleNeck(nn.Module):
     def __init__(self, in_ch, out_ch, residual_connection=True):
-        super(bottleneck, self).__init__()
+        super(BottleNeck, self).__init__()
         self.residual_connection = residual_connection
-        self.down_conv = down_conv(in_ch)
+        self.down_conv = DownConv(in_ch)
         self.double_conv = nn.Sequential(
-#            ComplexDropout2d(params.dropout_ratio),
+            #            ComplexDropout2d(params.dropout_ratio),
             ComplexConv2d(in_ch, 2 * in_ch, [3, 3], padding=(1, 1)),
             RadialBatchNorm2d(2 * in_ch),
             Activation(2 * in_ch),
-#            ComplexDropout2d(params.dropout_ratio),
+            #            ComplexDropout2d(params.dropout_ratio),
             ComplexConv2d(2 * in_ch, out_ch, [3, 3], padding=(1, 1)),
             RadialBatchNorm2d(out_ch),
             Activation(out_ch)
@@ -112,9 +108,9 @@ class bottleneck(nn.Module):
         return x
 
 
-class up(nn.Module):
+class Up(nn.Module):
     def __init__(self, in_ch, out_ch):
-        super(up, self).__init__()
+        super(Up, self).__init__()
 
         self.up = ComplexUpsample(scale_factor=2, mode='bilinear')
 
@@ -137,27 +133,9 @@ class up(nn.Module):
         x = self.conv(x)
         return x
 
-
-class mag_phase_combine(nn.Module):
+class OutConv(nn.Module):
     def __init__(self, in_ch, out_ch):
-        super(mag_phase_combine, self).__init__()
-        self.conv1d = nn.Sequential(
-            ComplexConv2d(in_ch, out_ch, [1, 1], padding=(0, 0))
-        )
-
-    def forward(self, x):
-        t = torch.split(x, int(x.size()[2] / 2), dim=2)
-        xt = [i for i in t]
-        x1 = xt[0]
-        x2 = xt[1]
-        x = torch.cat([x1, x2], dim=1)
-        x = self.conv1d(x)
-        return x
-
-
-class outconv(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super(outconv, self).__init__()
+        super(OutConv, self).__init__()
         self.conv = ComplexConv2d(in_ch, out_ch, [1, 1])
 
     def forward(self, x):

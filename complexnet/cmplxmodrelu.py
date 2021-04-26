@@ -1,9 +1,8 @@
-from torch.nn.parameter import Parameter
-
 import torch.nn as nn
-from utils.cmplxBatchNorm import magnitude
-from utils.saveNet import *
-
+from torch.nn.parameter import Parameter
+from utils.cmplx_batchnorm import magnitude
+from utils.save_net import *
+import torch
 
 class ModReLU(nn.Module):
     def __init__(self, in_channels, inplace=True):
@@ -17,19 +16,18 @@ class ModReLU(nn.Module):
     def reset_parameters(self):
         self.b.data.uniform_(-0.01, 0.0)
 
+    def _unsqueeze_at_indices(self, x, indices=[]):
+        for i in indices:
+            x = x.unsqueeze(i)
+        return x
+
     def forward(self, input):
         eps = 1e-5;
         ndims = input.ndimension()
         mag = magnitude(input).unsqueeze(-1) + eps
         mag = torch.cat([mag, mag], ndims - 1)
-        if ndims == 4:
-            brdcst_b = self.b.unsqueeze(0).unsqueeze(2).unsqueeze(3).expand_as(mag)
-        elif ndims == 5:
-            brdcst_b = self.b.unsqueeze(0).unsqueeze(2).unsqueeze(3).unsqueeze(4).expand_as(mag)
-        elif ndims == 6:
-            brdcst_b = self.b.unsqueeze(0).unsqueeze(2).unsqueeze(3).unsqueeze(4).unsqueeze(5).expand_as(mag)
+        sqz_idx = [0]+list(range(2, ndims))
+        brdcst_b = self._unsqueeze_at_indices(self.b, sqz_idx).expand_as(mag)
 
         output = torch.where((mag + brdcst_b) < 0.3, torch.tensor(0.0).to(input.device), input)
         return output
-
-

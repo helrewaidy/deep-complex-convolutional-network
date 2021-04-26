@@ -1,17 +1,18 @@
-from torch.utils import data
-from scipy.io import loadmat
 import numpy as np
-from utils.saveNet import *
+from scipy.io import loadmat
+from scipy import misc
+from torch.utils import data
+from .save_net import *
 
 
 # params = Parameters()
 
-def resizeImage(img, newSize, Interpolation=False):
+def resize_image(img, newSize, Interpolation=False):
     if img.ndim == 2:
         img = np.expand_dims(img, 2)
 
     if Interpolation:
-        return imresize(img, tuple(newSize), interp='bilinear')
+        return misc.imresize(img, tuple(newSize), interp='bilinear')
     else:
 
         x1 = (img.shape[0] - newSize[0]) // 2
@@ -20,32 +21,27 @@ def resizeImage(img, newSize, Interpolation=False):
         y1 = (img.shape[1] - newSize[1]) // 2
         y2 = img.shape[1] - newSize[1] - y1
 
-        if img.ndim == 3:
-            if x1 > 0:
-                img = img[x1:-x2, :, :]
-            elif x1 < 0:
-                img = np.pad(img, ((-x1, -x2), (0, 0), (0, 0)), 'constant')  # ((top, bottom), (left, right))
+        px = [(-x1, -x2), (0, 0), (0, 0)]
+        py = [(0, 0), (-y1, -y2), (0, 0)]
+        if img.ndim == 4:
+            px.append((0, 0))
+            py.append((0, 0))
 
-            if y1 > 0:
-                img = img[:, y1:-y2, :]
-            elif y1 < 0:
-                img = np.pad(img, ((0, 0), (-y1, -y2), (0, 0)), 'constant')  # ((top, bottom), (left, right))
+        if x1 > 0:
+            img = img[x1:-x2, ]
+        elif x1 < 0:
+            img = np.pad(img, px, 'constant')  # ((top, bottom), (left, right))
 
-        elif img.ndim == 4:
-            if x1 > 0:
-                img = img[x1:-x2, :, :, :]
-            elif x1 < 0:
-                img = np.pad(img, ((-x1, -x2), (0, 0), (0, 0), (0, 0)), 'constant')  # ((top, bottom), (left, right))
+        if y1 > 0:
+            img = img[:, y1:-y2, ]
+        elif y1 < 0:
+            img = np.pad(img, py, 'constant')  # ((top, bottom), (left, right))
 
-            if y1 > 0:
-                img = img[:, y1:-y2, :, :]
-            elif y1 < 0:
-                img = np.pad(img, ((0, 0), (-y1, -y2), (0, 0), (0, 0)), 'constant')  # ((top, bottom), (left, right))
         return img.squeeze()
 
 
-def getDatasetGenerators(params):
-    def getPatientSlicesURLs(patient_url):
+def get_dataset_generators(params):
+    def get_patient_slices_urls(patient_url):
         islices = list()
         oslices = list()
         for fs in os.listdir(patient_url + '/InputData/Input_realAndImag/'):
@@ -61,7 +57,7 @@ def getDatasetGenerators(params):
     num_slices_per_patient = []
     params.input_slices = []
     params.groundTruth_slices = []
-    params.us_rates = [];
+    params.us_rates = []
 
     P = loadmat(params.net_save_dir + 'lgePatients_urls.mat')['lgePatients']
     pNames = [i[0][0] for i in P]
@@ -74,7 +70,7 @@ def getDatasetGenerators(params):
             pdir = dir + p
             if os.path.exists(pdir):
                 params.patients.append(pdir)
-                slices = getPatientSlicesURLs(pdir)
+                slices = get_patient_slices_urls(pdir)
                 num_slices_per_patient.append(len(slices[0]))
                 params.input_slices = np.concatenate((params.input_slices, slices[0]))
                 params.groundTruth_slices = np.concatenate((params.groundTruth_slices, slices[1]))
@@ -149,10 +145,8 @@ class DataGenerator(data.Dataset):
         # Generate data
         img = loadmat(input_IDs_temp)['Input_realAndImag']
         orig_size = [img.shape[0], img.shape[1]]
-        X[0, ] = resizeImage(img, [self.dim[0], self.dim[1]])
-        y[0, :, :, 0] = resizeImage(loadmat(output_IDs_temp)['Data'], [self.dim[0], self.dim[1]])
+        X[0,] = resize_image(img, [self.dim[0], self.dim[1]])
+        y[0, :, :, 0] = resize_image(loadmat(output_IDs_temp)['Data'], [self.dim[0], self.dim[1]])
         X = np.nan_to_num(X)
         y = np.nan_to_num(y)
         return X, y, orig_size
-
-

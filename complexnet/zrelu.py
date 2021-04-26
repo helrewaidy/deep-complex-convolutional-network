@@ -1,8 +1,12 @@
+
 import numpy as np
+import torch
 import torch.nn as nn
-from utils.polarTransforms import *
+from utils.polar_transforms import *
+
 
 class ZReLU(nn.Module):
+    '''TODO: This module needs to be tested'''
     def __init__(self, polar=False):
         super(ZReLU, self).__init__()
         self.polar = polar
@@ -14,7 +18,7 @@ class ZReLU(nn.Module):
         input_imag = input.narrow(ndims - 1, 1, 1).squeeze(ndims - 1)
 
         if not self.polar:
-            mag, phase = cylindricalToPolarConversion(input_real, input_imag)
+            mag, phase = convert_cylindrical_to_polar(input_real, input_imag)
         else:
             phase = input_imag
 
@@ -25,4 +29,3 @@ class ZReLU(nn.Module):
         output = torch.where(phase <= np.pi / 2, output, torch.tensor(0.0).to(input.device))
 
         return output
-

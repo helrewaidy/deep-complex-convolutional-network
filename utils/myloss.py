@@ -1,18 +1,13 @@
-
-
 from math import exp
 
 import torch
-from torch.autograd import Function, Variable
-from torch.nn.modules.loss import _Loss
-
-import numpy as np
 import torch.nn.functional as F
+from torch.autograd import Variable
 
 
 def gaussian(window_size, sigma):
-    gauss = torch.Tensor([exp(-(x - window_size//2)**2/float(2*sigma**2)) for x in range(window_size)])
-    return gauss/gauss.sum()
+    gauss = torch.Tensor([exp(-(x - window_size // 2) ** 2 / float(2 * sigma ** 2)) for x in range(window_size)])
+    return gauss / gauss.sum()
 
 
 def create_window(window_size, channel):
@@ -30,16 +25,16 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True, full=Fals
 
     mu1_sq = mu1.pow(2)
     mu2_sq = mu2.pow(2)
-    mu1_mu2 = mu1*mu2
+    mu1_mu2 = mu1 * mu2
 
-    sigma1_sq = F.conv2d(img1*img1, window, padding=padd, groups=channel) - mu1_sq
-    sigma2_sq = F.conv2d(img2*img2, window, padding=padd, groups=channel) - mu2_sq
-    sigma12 = F.conv2d(img1*img2, window, padding=padd, groups=channel) - mu1_mu2
+    sigma1_sq = F.conv2d(img1 * img1, window, padding=padd, groups=channel) - mu1_sq
+    sigma2_sq = F.conv2d(img2 * img2, window, padding=padd, groups=channel) - mu2_sq
+    sigma12 = F.conv2d(img1 * img2, window, padding=padd, groups=channel) - mu1_mu2
 
-    C1 = 0.01**2
-    C2 = 0.03**2
+    C1 = 0.01 ** 2
+    C2 = 0.03 ** 2
 
-    ssim_map = ((2*mu1_mu2 + C1)*(2*sigma12 + C2))/((mu1_sq + mu2_sq + C1)*(sigma1_sq + sigma2_sq + C2))
+    ssim_map = ((2 * mu1_mu2 + C1) * (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2))
 
     v1 = 2.0 * sigma12 + C2
     v2 = sigma1_sq + sigma2_sq + C2
@@ -70,11 +65,11 @@ class SSIM(torch.nn.Module):
             window = self.window
         else:
             window = create_window(self.window_size, channel)
-            
+
             if img1.is_cuda:
                 window = window.cuda(img1.get_device())
             window = window.type_as(img1)
-            
+
             self.window = window
             self.channel = channel
 
@@ -86,11 +81,11 @@ def ssim(img1, img2, window_size=11, size_average=True, full=False):
 
     real_size = min(window_size, height, width)
     window = create_window(real_size, channel)
-    
+
     if img1.is_cuda:
         window = window.cuda(img1.get_device())
     window = window.type_as(img1)
-    
+
     return _ssim(img1, img2, window, real_size, channel, size_average, full=full)
 
 
@@ -104,8 +99,8 @@ def msssim(img1, img2, window_size=11, size_average=True):
                            len(img1.size()))
 
     if type(img1) is not Variable or type(img2) is not Variable:
-        raise RuntimeError('Input images must be Variables, not %s' % 
-                            img1.__class__.__name__)
+        raise RuntimeError('Input images must be Variables, not %s' %
+                           img1.__class__.__name__)
 
     weights = Variable(torch.FloatTensor([0.0448, 0.2856, 0.3001, 0.2363, 0.1333]))
     if img1.is_cuda:
@@ -124,8 +119,8 @@ def msssim(img1, img2, window_size=11, size_average=True):
 
     mssim = torch.cat(mssim)
     mcs = torch.cat(mcs)
-    return (torch.prod(mcs[0:levels-1] ** weights[0:levels-1]) *
-            (mssim[levels-1] ** weights[levels-1]))
+    return (torch.prod(mcs[0:levels - 1] ** weights[0:levels - 1]) *
+            (mssim[levels - 1] ** weights[levels - 1]))
 
 
 class MSSSIM(torch.nn.Module):
@@ -138,22 +133,3 @@ class MSSSIM(torch.nn.Module):
     def forward(self, img1, img2):
         # TODO: store window between calls if possible
         return msssim(img1, img2, window_size=self.window_size, size_average=self.size_average)
-
-
-def kspace_consistency(img1, img2):
-    k1 = torch.fft(img1, signal_ndim=2, normalized=False)
-    k2 = torch.fft(img2, signal_ndim=2, normalized=False)
-    e = torch.ifft((k2-k1), signal_ndim=2, normalized=False)
-    return e.abs_().sum()
-    
-
-class KspaceConsistency(_Loss):
-
-    def forward(self, img1, img2):
-        return kspace_consistency(img1, img2)
-
-    
-class TotalVariations(_Loss):
-
-    def forward(self, img1):
-        return torch.sum(torch.abs(img1[:, :, :-1] - img1[:, :, 1:])) + torch.sum(torch.abs(img1[:, :-1, :] - img1[:, 1:, :]))
