@@ -13,8 +13,6 @@ class ComplexConv(nn.Module):
                  dilation=1,
                  groups=1,
                  bias=True,
-                 normalize_weight=False,
-                 epsilon=1e-7,
                  conv_transposed=False):
         super(ComplexConv, self).__init__()
         self.rank = rank
@@ -52,8 +50,8 @@ class ComplexConv(nn.Module):
 
     def forward(self, input):
         '''
-            assume complex input z = x + iy needs to be convolved by complex filter h = a + ib
-            where Output O = z * h, where * is convolution operator, then O = x*a + i(x*b)+ i(y*a) - y*b
+            Considering a complex-valued input z = x + iy to be convolved by complex-valued filter h = a + ib
+            where Output O = z * h, where * is a complex convolution operator, then O = x*a + i(x*b)+ i(y*a) - y*b
             so we need to calculate each of the 4 convolution operations in the previous equation,
             one simple way to implement this as two conolution layers, one layer for the real weights (a)
             and the other for imaginary weights (b), this can be done by concatenating both real and imaginary
@@ -126,18 +124,6 @@ class ComplexConv2d(ComplexConv):
     """Applies a 2D Complex convolution over an input signal composed of several input
     planes.
 
-    Args:
-        in_channels (int): Number of channels in the input image
-        out_channels (int): Number of channels produced by the convolution
-        kernel_size (int or tuple): Size of the convolving kernel
-        stride (int or tuple, optional): Stride of the convolution. Default: 1
-        padding (int or tuple, optional): Zero-padding added to both sides of
-            the input. Default: 0
-        dilation (int or tuple, optional): Spacing between kernel
-            elements. Default: 1
-        groups (int, optional): Number of blocked connections from input
-            channels to output channels. Default: 1
-        bias (bool, optional): If ``True``, adds a learnable bias to the output. Default: ``True``
     Args:
         in_channels (int): Number of channels in the input image
         out_channels (int): Number of channels produced by the convolution
