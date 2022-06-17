@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from complex_net.cmplx_conv import ComplexConv1d, ComplexConv2d, ComplexConv3d
-from complex_net.cmplx_activation import CReLU, ModReLU, ZReLU
-from complex_net.cmplx_upsample import ComplexUpsample
-from complex_net.radial_bn import RadialBatchNorm1d, RadialBatchNorm2d, RadialBatchNorm3d
-from complex_net.cmplx_dropout import ComplexDropout
+from complex_layers.cmplx_conv import ComplexConv1d, ComplexConv2d, ComplexConv3d
+from complex_layers.cmplx_activation import CReLU, ModReLU, ZReLU
+from complex_layers.cmplx_upsample import ComplexUpsample
+from complex_layers.radial_bn import RadialBatchNorm1d, RadialBatchNorm2d, RadialBatchNorm3d
+from complex_layers.cmplx_dropout import ComplexDropout
 from configs import config
 
 

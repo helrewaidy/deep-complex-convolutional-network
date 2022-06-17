@@ -6,13 +6,13 @@ import torch.nn.modules.loss as Loss
 from torch import optim
 import numpy as np
 
-from network.cmplx_unet import CUNet
-from network.cmplx_blocks import batch_norm
+from complex_net.cmplx_unet import CUNet
+from complex_net.cmplx_blocks import batch_norm
 from utils.dataset import get_dataloaders
 from utils.myloss import *
 from configs import config
 import logging
-from complex_net.radial_bn import RadialNorm
+from complex_layers.radial_bn import RadialNorm
 
 
 logging.basicConfig(

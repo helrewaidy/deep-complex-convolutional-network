@@ -1,7 +1,5 @@
 from typing import Tuple, List
 import numpy as np
-from scipy.io import loadmat
-from scipy import misc
 from torch.utils.data import Dataset, DataLoader
 from configs import config
 
@@ -31,8 +29,8 @@ def get_dataloaders() -> Tuple[DataLoader, DataLoader]:
         The training and validation data loaders
     """
     input_shape = (config.in_channels, *config.input_shape)
-    tr_dataset = DataGenerator(input_shape, list(range(2)))
-    vld_dataset = DataGenerator(input_shape, list(range(2)))
+    tr_dataset = DataGenerator(input_shape, list(range(80)))
+    vld_dataset = DataGenerator(input_shape, list(range(20)))
 
     tr_data_loader = DataLoader(
         tr_dataset,
