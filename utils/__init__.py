@@ -1,3 +1,3 @@
 from .dataset import *
-from .myloss import *
+from .loss import *
 from .polar_transforms import *
