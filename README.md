@@ -1,6 +1,8 @@
+
 PyTorch implementation of complex convolutional network for Magnetic Reasonance Imaging (MRI) reconstruction 
 
-Please cite the following paper:
+
+If you find this code useful, please cite the following paper:
 @article{el2020deep,
   title={Deep complex convolutional network for fast reconstruction of 3D late gadolinium enhancement cardiac MRI},
   author={El-Rewaidy, Hossam and Neisius, Ulf and Mancio, Jennifer and Kucukseymen, Selcuk and Rodriguez, Jennifer and Paskavitz, Amanda and Menze, Bjoern and Nezafat, Reza},

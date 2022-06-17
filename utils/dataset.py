@@ -1,152 +1,75 @@
+from typing import Tuple, List
 import numpy as np
 from scipy.io import loadmat
 from scipy import misc
-from torch.utils import data
-from .save_net import *
+from torch.utils.data import Dataset, DataLoader
+from configs import config
 
 
-# params = Parameters()
-
-def resize_image(img, newSize, Interpolation=False):
-    if img.ndim == 2:
-        img = np.expand_dims(img, 2)
-
-    if Interpolation:
-        return misc.imresize(img, tuple(newSize), interp='bilinear')
-    else:
-
-        x1 = (img.shape[0] - newSize[0]) // 2
-        x2 = img.shape[0] - newSize[0] - x1
-
-        y1 = (img.shape[1] - newSize[1]) // 2
-        y2 = img.shape[1] - newSize[1] - y1
-
-        px = [(-x1, -x2), (0, 0), (0, 0)]
-        py = [(0, 0), (-y1, -y2), (0, 0)]
-        if img.ndim == 4:
-            px.append((0, 0))
-            py.append((0, 0))
-
-        if x1 > 0:
-            img = img[x1:-x2, ]
-        elif x1 < 0:
-            img = np.pad(img, px, 'constant')  # ((top, bottom), (left, right))
-
-        if y1 > 0:
-            img = img[:, y1:-y2, ]
-        elif y1 < 0:
-            img = np.pad(img, py, 'constant')  # ((top, bottom), (left, right))
-
-        return img.squeeze()
+def create_cmplx_dataset(data_shape: Tuple) -> np.ndarray:
+    """Create a dataset of complex images.
+    
+    Parameters
+    ----------
+    data_shape : Tuple
+        The shape of the data.
+    
+    Returns
+    -------
+    np.ndarray
+        A dataset of complex random values.
+    """
+    return np.random.rand(*data_shape)
 
 
-def get_dataset_generators(params):
-    def get_patient_slices_urls(patient_url):
-        islices = list()
-        oslices = list()
-        for fs in os.listdir(patient_url + '/InputData/Input_realAndImag/'):
-            islices.append(patient_url + '/InputData/Input_realAndImag/' + fs)
+def get_dataloaders() -> Tuple[DataLoader, DataLoader]:
+    """Get the dataset loaders.
 
-        for fs in os.listdir(patient_url + '/CSRecon/CSRecon_Data_small/'):
-            oslices.append(patient_url + '/CSRecon/CSRecon_Data_small/' + fs)
-        islices = sorted(islices, key=lambda x: int((x.rsplit(sep='/')[-1])[8:-4]))
-        oslices = sorted(oslices, key=lambda x: int((x.rsplit(sep='/')[-1])[8:-4]))
+    Returns
+    -------
+    Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]
+        The training and validation data loaders
+    """
+    input_shape = (config.in_channels, *config.input_shape)
+    tr_dataset = DataGenerator(input_shape, list(range(2)))
+    vld_dataset = DataGenerator(input_shape, list(range(2)))
 
-        return (islices, oslices)
+    tr_data_loader = DataLoader(
+        tr_dataset,
+        batch_size=config.batch_size,
+        shuffle=True,
+        num_workers=config.data_loaders_num_workers
+    )
 
-    num_slices_per_patient = []
-    params.input_slices = []
-    params.groundTruth_slices = []
-    params.us_rates = []
+    vld_data_loader = DataLoader(
+        vld_dataset,
+        batch_size=config.batch_size,
+        shuffle=False,
+        num_workers=config.data_loaders_num_workers
+    )
 
-    P = loadmat(params.net_save_dir + 'lgePatients_urls.mat')['lgePatients']
-    pNames = [i[0][0] for i in P]
-    usRates = [i[1][0] for i in P]
-
-    k = -1
-    for p in pNames:
-        k += 1
-        for dir in params.dir:
-            pdir = dir + p
-            if os.path.exists(pdir):
-                params.patients.append(pdir)
-                slices = get_patient_slices_urls(pdir)
-                num_slices_per_patient.append(len(slices[0]))
-                params.input_slices = np.concatenate((params.input_slices, slices[0]))
-                params.groundTruth_slices = np.concatenate((params.groundTruth_slices, slices[1]))
-                params.us_rates = np.concatenate([params.us_rates, usRates[k] * np.ones(len(slices[0]))])
-                continue
-
-    print('-- Number of Datasets: ' + str(len(params.patients)))
-
-    params.num_slices_per_patient = num_slices_per_patient
-
-    training_ptns = round(params.training_percent * len(num_slices_per_patient))
-
-    training_end_indx = sum(num_slices_per_patient[0:training_ptns])
-    evaluation_end_indx = training_end_indx + sum(num_slices_per_patient)
-
-    params.training_patients_index = range(0, training_ptns)
-
-    training_DS = DataGenerator(input_IDs=params.input_slices[:training_end_indx],
-                                output_IDs=params.groundTruth_slices[:training_end_indx],
-                                undersampling_rates=params.us_rates[:training_end_indx],
-                                dim=(params.img_size[0], params.img_size[1], 2),
-                                n_channels=params.n_channels)
-
-    validation_DS = DataGenerator(input_IDs=params.input_slices[training_end_indx:evaluation_end_indx],
-                                  output_IDs=params.groundTruth_slices[training_end_indx:evaluation_end_indx],
-                                  undersampling_rates=params.us_rates[training_end_indx:evaluation_end_indx],
-                                  dim=(params.img_size[0], params.img_size[1], 2),
-                                  n_channels=params.n_channels)
-
-    training_DL = data.DataLoader(training_DS, batch_size=params.batch_size, shuffle=True,
-                                  num_workers=params.data_loders_num_workers)
-
-    validation_DL = data.DataLoader(validation_DS, batch_size=params.batch_size, shuffle=False,
-                                    num_workers=params.data_loders_num_workers)
-
-    return training_DL, validation_DL, params
+    return tr_data_loader, vld_data_loader
 
 
-class DataGenerator(data.Dataset):
-    'Generates data for Keras'
+class DataGenerator(Dataset):
+    def __init__(self, input_shape: Tuple, data_indicies: List):
+        """Initialize the DataGenerator class.
 
-    def __init__(self, input_IDs, output_IDs, undersampling_rates=None, dim=(256, 256, 2), n_channels=1):
-        'Initialization'
-        self.dim = dim
-        self.output_IDs = output_IDs
-        self.input_IDs = input_IDs
-        self.n_channels = n_channels
-        self.undersampling_rates = undersampling_rates
-
+        Parameters
+        ----------
+        input_shape : Tuple
+            The shape of the input data.
+        """
+        self.input_shape = input_shape
+        self.data_indicies = data_indicies
+    
     def __len__(self):
-        'Denotes the number of batches per epoch'
-        return len(self.input_IDs)
+        return len(self.data_indicies)
 
     def __getitem__(self, index):
         'Generate one batch of data'
-
-        # Generate data
-        X, y, orig_size = self.__data_generation(self.input_IDs[index], self.output_IDs[index])
-        if self.undersampling_rates is not None:
-            usr = self.undersampling_rates[index]
-        else:
-            usr = None
-
-        return X, y, self.input_IDs[index], orig_size, usr
-
-    def __data_generation(self, input_IDs_temp, output_IDs_temp):
-        'Generates data containing batch_size samples'  # X : (n_samples, *dim, n_channels)
-        # Initialization
-        X = np.zeros((self.n_channels, *self.dim))
-        y = np.zeros((self.n_channels, *self.dim))
-
-        # Generate data
-        img = loadmat(input_IDs_temp)['Input_realAndImag']
-        orig_size = [img.shape[0], img.shape[1]]
-        X[0,] = resize_image(img, [self.dim[0], self.dim[1]])
-        y[0, :, :, 0] = resize_image(loadmat(output_IDs_temp)['Data'], [self.dim[0], self.dim[1]])
-        X = np.nan_to_num(X)
-        y = np.nan_to_num(y)
-        return X, y, orig_size
+        usr = 4
+        X = create_cmplx_dataset(self.input_shape)
+        ds_shape = [s//usr for s in range(1, len(self.input_shape)-1)]
+        y = np.resize(np.resize(X.copy(), ds_shape), self.input_shape)
+        return X, y

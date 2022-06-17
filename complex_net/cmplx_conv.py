@@ -1,19 +1,22 @@
 import torch
 import torch.nn as nn
-from utils.save_net import *
+
 
 class ComplexConv(nn.Module):
-    def __init__(self, rank,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride=1,
-                 padding=0,
-                 output_padding=0,
-                 dilation=1,
-                 groups=1,
-                 bias=True,
-                 conv_transposed=False):
+    def __init__(
+        self,
+        rank,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride=1,
+        padding=0,
+        output_padding=0,
+        dilation=1,
+        groups=1,
+        bias=True,
+        conv_transposed=False
+    ):
         super(ComplexConv, self).__init__()
         self.rank = rank
         self.in_channels = in_channels
@@ -27,14 +30,15 @@ class ComplexConv(nn.Module):
         self.bias = bias
         self.conv_transposed = conv_transposed
 
-        self.conv_args = {"in_channels": self.in_channels,
-                          "out_channels": self.out_channels,
-                          "kernel_size": self.kernel_size,
-                          "stride": self.stride,
-                          "padding": self.padding,
-                          "groups": self.groups,
-                          "bias": self.bias
-                          }
+        self.conv_args = {
+            "in_channels": self.in_channels,
+            "out_channels": self.out_channels,
+            "kernel_size": self.kernel_size,
+            "stride": self.stride,
+            "padding": self.padding,
+            "groups": self.groups,
+            "bias": self.bias
+        }
 
         if self.conv_transposed:
             self.conv_args["output_padding"] = self.output_padding
@@ -59,17 +63,12 @@ class ComplexConv(nn.Module):
             c_r = [x; y] * a , and  c_i= [x; y] * b, so that
             O_real = c_r[real] - c_i[real], and O_imag = c_r[imag] - c_i[imag]
         '''
-
-        ndims = input.ndimension()
-
-        input_real = input.narrow(ndims - 1, 0, 1).squeeze(ndims - 1)
-        input_imag = input.narrow(ndims - 1, 1, 1).squeeze(ndims - 1)
+        input_real, input_imag = torch.unbind(input, dim=-1)
 
         output_real = self.real_conv(input_real) - self.imag_conv(input_imag)
         output_imag = self.real_conv(input_imag) + self.imag_conv(input_real)
-
-        output = torch.stack([output_real, output_imag], dim=ndims - 1)
-
+        
+        output = torch.stack([output_real, output_imag], dim=-1)
         return output
 
 

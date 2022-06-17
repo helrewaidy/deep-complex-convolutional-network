@@ -1,22 +1,17 @@
 import torch
 import torch.nn as nn
-from utils.save_net import *
 
 
-class ComplexDropoutNd(nn.Module):
+class ComplexDropout(nn.Module):
 
     def __init__(self, rank, p=0.5, inplace=True):
-        super(ComplexDropoutNd, self).__init__()
+        super(ComplexDropout, self).__init__()
         if p < 0 or p > 1:
             raise ValueError("dropout probability has to be between 0 and 1, "
                              "but got {}".format(p))
         self.rank = rank
         self.p = p
         self.inplace = inplace
-
-    #         self.dropout = {1: nn.Dropout,
-    #                         2: nn.Dropout2d,
-    #                         3: nn.Dropout3d}[self.rank](self.p, self.inplace)
 
     def extra_repr(self):
         inplace_str = ', inplace' if self.inplace else ''
@@ -26,22 +21,19 @@ class ComplexDropoutNd(nn.Module):
         if not self.training or self.p == 0:
             return input
 
-        input_shape = input.shape
-
         if self.p == 1:
-            return torch.FloatTensor(input_shape).to(input.device).zero_()
+            return torch.FloatTensor(input.shape).to(input.device).zero_()
 
-        ndims = input.ndimension()
-        msk = torch.FloatTensor(input_shape[:-1]).to(input.device).uniform_().unsqueeze(-1) > self.p
-        msk = torch.cat([msk, msk], ndims - 1)
+        msk = torch.FloatTensor(input.shape[:-1]).to(input.device).uniform_() > self.p
+        msk = torch.stack([msk, msk], dim=-1)
 
         output = input * msk.to(torch.float32)
 
         return output
 
 
-class ComplexDropout(ComplexDropoutNd):
-    r"""Randomly zeroes whole channels of the input tensor.
+class ComplexDropout1d(ComplexDropout):
+    r"""Randomly zeroes whole channels of the complex input tensor.
         The channels to zero are randomized on every forward call.
         Usually the input comes from :class:`nn.Conv3d` modules.
         Args:
@@ -52,17 +44,16 @@ class ComplexDropout(ComplexDropoutNd):
             - Input: :math:`(N, C, D, H, W, 2)`
             - Output: :math:`(N, C, D, H, W, 2)` (same shape as input)
     """
-
     def __init__(self, p=0.5, inplace=False):
-        super(ComplexDropout, self).__init__(
+        super(ComplexDropout1d, self).__init__(
             rank=1,
             p=p,
             inplace=inplace
         )
 
 
-class ComplexDropout2d(ComplexDropoutNd):
-    r"""Randomly zeroes whole channels of the input tensor.
+class ComplexDropout2d(ComplexDropout):
+    r"""Randomly zeroes whole channels of the complex input tensor.
     The channels to zero-out are randomized on every forward call.
     Usually the input comes from :class:`nn.Conv2d` modules.
     Args:
@@ -74,7 +65,6 @@ class ComplexDropout2d(ComplexDropoutNd):
         - Output: :math:`(N, C, H, W, 2)` (same shape as input)
 
     """
-
     def __init__(self, p=0.5, inplace=False):
         super(ComplexDropout2d, self).__init__(
             rank=2,
@@ -83,8 +73,8 @@ class ComplexDropout2d(ComplexDropoutNd):
         )
 
 
-class ComplexDropout3d(ComplexDropoutNd):
-    r"""Randomly zeroes whole channels of the input tensor.
+class ComplexDropout3d(ComplexDropout):
+    r"""Randomly zeroes whole channels of the complex input tensor.
     The channels to zero are randomized on every forward call.
     Usually the input comes from :class:`nn.Conv3d` modules.
     Args:
@@ -96,10 +86,17 @@ class ComplexDropout3d(ComplexDropoutNd):
         - Output: :math:`(N, C, D, H, W, 2)` (same shape as input)
 
     """
-
     def __init__(self, p=0.5, inplace=False):
         super(ComplexDropout3d, self).__init__(
             rank=3,
             p=p,
             inplace=inplace
         )
+
+
+if __name__ == '__main__':
+    x = torch.rand((2, 2, 8, 8, 2))
+    print(f"non-zero elements: {len(x.nonzero())}")
+    dropout = ComplexDropout2d(p=0.5)
+    y = dropout(x)
+    print(f"non-zero elements: {len(y.nonzero())}")
