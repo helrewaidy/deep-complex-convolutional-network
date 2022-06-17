@@ -9,7 +9,7 @@ import numpy as np
 from complex_net.cmplx_unet import CUNet
 from complex_net.cmplx_blocks import batch_norm
 from utils.dataset import get_dataloaders
-from utils.myloss import *
+from utils.loss import SSIM
 from configs import config
 import logging
 from complex_layers.radial_bn import RadialNorm
